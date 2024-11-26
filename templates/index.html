@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>J0hnOmegle</title>
+    <script src="https://cdn.socket.io/4.5.3/socket.io.min.js"></script>
+    <style>
+        /* Basic reset */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #111;
+            color: #fff;
+            font-family: 'Arial', sans-serif;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        h1 {
+            font-size: 2rem;
+            color: #FF6EC7; /* Funky pink color */
+            text-align: center;
+            text-shadow: 2px 2px 10px rgba(255, 255, 255, 0.2);
+            margin-bottom: 20px;
+        }
+
+        /* Abstract geometry background */
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 10%, transparent 30%), 
+                        linear-gradient(45deg, #ff6ec7, #00c6ff, #f0e130, #66ff66);
+            background-size: 50px 50px;
+            opacity: 0.1;
+            z-index: -1;
+        }
+
+        #nickname, #chat {
+            text-align: center;
+        }
+
+        input[type="text"], button {
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            margin: 10px;
+            font-size: 1rem;
+        }
+
+        input[type="text"] {
+            background-color: #333;
+            color: #fff;
+            width: 300px;
+        }
+
+        button {
+            background-color: #FF6EC7;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            font-size: 1.1rem;
+        }
+
+        button:hover {
+            background-color: #00c6ff;
+        }
+
+        /* Chat section styling */
+        #chat {
+            display: none;
+            width: 400px;
+            background-color: rgba(0, 0, 0, 0.8);
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        #partner-name {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #FF6EC7;
+            text-shadow: 2px 2px 10px rgba(255, 255, 255, 0.2);
+        }
+
+        #messages {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            background-color: #222;
+            padding: 10px;
+            border-radius: 5px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message {
+            color: #d0ff00; /* Red color for both users */
+            font-size: 1.1rem;
+            padding: 5px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            max-width: 80%;
+            word-wrap: break-word;
+            margin-left: 10px;
+            margin-right: 10px;
+        }
+
+        /* Partner's message on the left */
+        .partner-message {
+            align-self: flex-start;
+            background-color: rgba(0, 221, 255, 0.2); /* Light red background for partner */
+        }
+
+        /* User's message on the right */
+        .user-message {
+            align-self: flex-end;
+            background-color: rgba(0, 255, 26, 0.6); /* Darker red background for user */
+        }
+
+        /* Custom scrollbar for messages */
+        #messages::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #messages::-webkit-scrollbar-thumb {
+            background-color: #444;
+            border-radius: 5px;
+        }
+
+    </style>
+</head>
+<body>
+    <div id="nickname">
+        <h1>J0hnOmegle</h1>
+        <input id="username" type="text" placeholder="Enter your nickname...">
+        <button id="join-button">Join Chat</button>
+        <button id="rejoin-button" style="display:none;">Rejoin Chat</button> <!-- New Rejoin Button -->
+    </div>
+
+    <div id="chat">
+        <h2 id="partner-name"></h2>
+        <div id="messages"></div>
+        <input id="message-input" type="text" placeholder="Type a message...">
+        <button id="send-button">Send</button>
+        <button id="disconnect-button">Disconnect</button> <!-- Disconnect Button -->
+    </div>
+
+    <script>
+        const socket = io();
+        const nicknameDiv = document.getElementById('nickname');
+        const chatDiv = document.getElementById('chat');
+        const messagesDiv = document.getElementById('messages');
+        const usernameInput = document.getElementById('username');
+        const joinButton = document.getElementById('join-button');
+        const rejoinButton = document.getElementById('rejoin-button');
+        const messageInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-button');
+        const disconnectButton = document.getElementById('disconnect-button');
+        const partnerName = document.getElementById('partner-name');
+
+        let room;
+
+        joinButton.addEventListener('click', () => {
+            const username = usernameInput.value;
+            if (username) {
+                socket.emit('join', { username });
+                nicknameDiv.style.display = 'none';
+                chatDiv.style.display = 'block';
+            }
+        });
+
+        rejoinButton.addEventListener('click', () => {
+            const username = usernameInput.value;
+            if (username) {
+                socket.emit('join', { username }); // Rejoin the same room
+                nicknameDiv.style.display = 'none';
+                chatDiv.style.display = 'block';
+            }
+        });
+
+        socket.on('waiting', (data) => {
+            messagesDiv.innerHTML = `<p class="message">${data.message}</p>`;
+        });
+
+        socket.on('paired', (data) => {
+            room = data.room;
+            partnerName.textContent = `Chatting with: ${data.partner}`;
+            messagesDiv.innerHTML = '';
+            rejoinButton.style.display = 'none'; // Hide the rejoin button after pairing
+        });
+
+        sendButton.addEventListener('click', () => {
+            const message = messageInput.value;
+            if (message) {
+                // Ensure 'room' is included in the emitted data
+                socket.emit('message', { room, message });
+                messageInput.value = '';
+                addMessage(`You: ${message}`, true);
+            }
+        });
+
+        socket.on('message', (message) => {
+            addMessage(`Partner: ${message.message}`, false);
+        });
+
+        socket.on('partner_left', (data) => {
+            addMessage(data.message, false);
+            rejoinButton.style.display = 'block'; // Show rejoin button if partner leaves
+        });
+
+        disconnectButton.addEventListener('click', () => {
+            socket.emit('disconnect_room', { room }); // Emit disconnect event to server
+            nicknameDiv.style.display = 'block';
+            chatDiv.style.display = 'none';
+            rejoinButton.style.display = 'none'; // Hide rejoin button when disconnected
+        });
+
+        function addMessage(msg, isUser) {
+            const msgDiv = document.createElement('div');
+            msgDiv.textContent = msg;
+            msgDiv.classList.add('message');
+            if (isUser) {
+                msgDiv.classList.add('user-message');  // Align message to the right for the user
+            } else {
+                msgDiv.classList.add('partner-message');  // Align message to the left for the partner
+            }
+            messagesDiv.appendChild(msgDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight; // Auto scroll to the bottom
+        }
+    </script>
+</body>
+</html>
